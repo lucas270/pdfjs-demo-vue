@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
+  <title>vue-pdf</title>
+  <style>
+    html,
+    body {
+      height: 100%;
+      background-color: #fff;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    #app {
+      padding: 20px;
+    }
+
+    #pdfBox1,#pdfBox2,#the-canvas {
+      height: 60vh;
+      width: 60%;
+      border: 1px solid #ccc;
+      overflow: auto;
+    }
+
+    .pd10 {
+      padding: 10px;
+    }
+
+    /*.pdfCanvas{
+      width: 100%;
+    } */
+  </style>
+  <script src="./vue.js"></script>
+  <script src="./pdf.js"></script>
+</head>
+
+<body>
+  <div id="app">
+    <p>方式一，用iframe渲染，速度最快(工具栏是直接修改viewer.html里的css显示出来的，>_< )</p>
+    <div id="pdfBox1">
+      <iframe src="./pdfjs/web/viewer.html?file=http%3A%2F%2Fimage.cache.timepack.cn%2Fnodejs.pdf" width="100%" height="100%"></iframe>
+      <!-- 用vue-cli创建出来的，把pdfjs直接放在public文件夹下,如下引入 -->
+      <!--  <iframe src="/pdfjs/web/viewer.html?file=http%3A%2F%2Fimage.cache.timepack.cn%2Fnodejs.pdf" width="100%" height="100%"></iframe> -->
+    </div>
+    <p>方式二，用js直接渲染(速度要慢些)</p>
+    <br />
+    <div id="pdfBox2"></div>
+    <br />
+    <p>方式三，用canvas标签，点击翻页</p>
+    <p class="pd10">
+      <button id="prev">上一页</button>
+      <!-- <span id="page_count"></span> -->
+      <button id="next">下一页</button>
+    </p>
+    <canvas id="the-canvas"></canvas>
+
+
+  </div>
+  <script>
+    /*
+      官网用的viewer.js：http://mozilla.github.io/pdf.js/web/viewer.html
+	  
+      下面的PDFJS 是由上面script引入的pdf.js
+	  
+      es6那种
+      npm install pdfjs-dist -S
+      import PDFJS from 'pdfjs-dist'
+    */
+    async function renderPageAsync(pdf, numPages, current) {
+      const pdfCol = document.querySelector('#pdfBox2')
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i)
+        const scale = 1
+        const viewport = page.getViewport(scale)
+        // Prepare canvas using PDF page dimensions.
+        const canvas = document.createElement('canvas')
+        const context = canvas.getContext('2d')
+        document.body.appendChild(canvas)
+
+        canvas.height = viewport.height
+        canvas.width = viewport.width
+
+        // Render PDF page into canvas context.
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport
+        }
+        page.render(renderContext)
+        canvas.className = 'pdfCanvas'
+        pdfCol.appendChild(canvas)
+      }
+    }
+
+    const url = 'http://image.cache.timepack.cn/nodejs.pdf';
+
+    new Vue({
+      el: '#app',
+      data() {
+        return {
+
+        }
+      },
+      mounted: function () {
+        this.renderPDF2();
+        this.renderPDF3();
+      },
+      methods: {
+        renderPDF2() {
+          // 后台返回的pdf
+          // const url = '/pdfjs/web/test.pdf' // 本地pdf
+          PDFJS.getDocument(url).then(pdf => {
+            var numPages = pdf.numPages
+            var start = 1
+            renderPageAsync(pdf, numPages, start)
+          })
+        },
+        renderPDF3() {
+          var pdfDoc = null,
+            pageNum = 1,
+            pageRendering = false,
+            pageNumPending = null,
+            scale = 1
+            canvas = document.getElementById('the-canvas'),
+            ctx = canvas.getContext('2d');
+
+          /**
+           * Get page info from document, resize canvas accordingly, and render page.
+           * @param num Page number.
+           */
+          function renderPage(num) {
+            pageRendering = true;
+
+            pdfDoc.getPage(num).then(function (page) {
+              var viewport = page.getViewport(scale);
+              canvas.height = viewport.height;
+              canvas.width = viewport.width;
+
+              var renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+              };
+              var renderTask = page.render(renderContext);
+
+
+              renderTask.promise.then(function () {
+                pageRendering = false;
+                if (pageNumPending !== null) {
+                  renderPage(pageNumPending);
+                  pageNumPending = null;
+                }
+              });
+            });
+
+            // document.getElementById('page_num').textContent = num;
+          }
+
+
+          function queueRenderPage(num) {
+            if (pageRendering) {
+              pageNumPending = num;
+            } else {
+              renderPage(num);
+            }
+          }
+
+          // 上一页
+          function onPrevPage() {
+            if (pageNum <= 1) {
+              return;
+            }
+            pageNum--;
+            queueRenderPage(pageNum);
+          }
+          document.getElementById('prev').addEventListener('click', onPrevPage);
+
+          // 下一页
+          function onNextPage() {
+            if (pageNum >= pdfDoc.numPages) {
+              return;
+            }
+            pageNum++;
+            queueRenderPage(pageNum);
+          }
+          document.getElementById('next').addEventListener('click', onNextPage);
+
+          PDFJS.getDocument(url).then(function (pdfDoc_) {
+            pdfDoc = pdfDoc_;
+            // document.getElementById('page_count').textContent = pdfDoc.numPages;
+            renderPage(pageNum);
+          });
+        }
+      },
+    })
+  </script>
+</body>
+
+</html>
